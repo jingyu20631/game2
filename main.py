@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="3D 마리오 카트 8 - 하이퀄리티 & 스마트 AI",
+    page_title="3D 마리오 카트 8 - 정밀 조작 & 스마트 AI",
     page_icon="🏎️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -37,7 +37,7 @@ character = st.sidebar.selectbox(
 speed_class = st.sidebar.select_slider(
     "⚡ 엔진 속도 클래스",
     options=["50cc (초보)", "100cc (중급)", "150cc (고수/프로)"],
-    value="150cc (고수/프로)"
+    value="100cc (중급)"
 )
 
 ai_count = st.sidebar.slider("🤖 AI 라이벌 카트 수", min_value=3, max_value=7, value=5)
@@ -47,9 +47,9 @@ st.sidebar.markdown("""
 ---
 ### 🎮 게임 조작법
 * **[ W / ↑ ]** : 가속 | **[ S / ↓ ]** : 브레이크/후진
-* **[ A, D / ←, → ]** : 조향 (핸들링)
+* **[ A, D / ←, → ]** : 조향 (핸들링 - 감도 개선됨)
 * **[ Shift ]** : 드리프트 (코너링 부스터)
-* **[ Space / E ]** : 아이템 사용 (**🚀 미사일 발사**, 🍌 바나나 후방 설치, 🍄 부스터)
+* **[ Space / E ]** : 아이템 사용 (🚀 미사일, 🍌 바나나 후방 설치, 🍄 부스터)
 * **[ C ]** : 시점 변경 (3인칭 / 탑뷰 / 1인칭)
 * **[ R ]** : 게임 재시작
 """)
@@ -66,15 +66,16 @@ color_map = {
 }
 player_color = color_map.get(character, "#e52521")
 
-speed_map = {"50cc (초보)": 0.9, "100cc (중급)": 1.25, "150cc (고수/프로)": 1.6}
-speed_multiplier = speed_map.get(speed_class, 1.25)
+# 조작 편의성을 위한 전체 속도 밸런스 조정
+speed_map = {"50cc (초보)": 0.65, "100cc (중급)": 0.85, "150cc (고수/프로)": 1.05}
+speed_multiplier = speed_map.get(speed_class, 0.85)
 
 html_code = f"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>3D Mario Kart Ultra Edition</title>
+    <title>3D Mario Kart Balanced Edition</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }}
         body {{ overflow: hidden; background: #000; width: 100vw; height: 100vh; }}
@@ -193,15 +194,21 @@ html_code = f"""
         let itemBoxes = [], bananas = [], missiles = [], particleEffects = [];
         
         let keys = {{}};
-        let speed = 0, maxSpeed = 1.45 * SPEED_MULT, accel = 0.032, turnSpeed = 0.042;
+        
+        // 🛠️ 조작감 개선: 플레이어 속도 하향 및 핸들링 감도 상향
+        let speed = 0;
+        let maxSpeed = 0.95 * SPEED_MULT; // 기존 1.45에서 안정적인 0.95로 감소
+        let accel = 0.018;                // 출발 시 급발진 방지
+        let turnSpeed = 0.045;            // 안정적인 스티어링 제어
         let steeringAngle = 0, driftTime = 0, isDrifting = false;
+        
         let currentLap = 1, totalLaps = 3, totalProgress = 0;
         let raceState = 'COUNTDOWN';
         let raceStartTime = 0, elapsedTime = 0;
         let currentItem = null;
         let cameraMode = 0;
 
-        // --- 효과음 ---
+        // 효과음
         let audioCtx = null;
         function initAudio() {{ if (!SOUND_ENABLED || audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }}
         function playSound(type) {{
@@ -244,7 +251,7 @@ html_code = f"""
             }} catch(e) {{}}
         }}
 
-        // --- 메인 초기화 ---
+        // 메인 초기화
         function init() {{
             const container = document.getElementById('game-container');
             
@@ -258,7 +265,6 @@ html_code = f"""
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             container.appendChild(renderer.domElement);
 
-            // 환경광 & 직사광
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
             scene.add(ambientLight);
 
@@ -280,7 +286,7 @@ html_code = f"""
             playerKart.posProgress = 0;
             scene.add(playerKart.mesh);
 
-            // 고성능 AI 카트 생성 (플레이어보다 기본 속도가 빠름)
+            // 🤖 AI 카트 생성: 플레이어와 동일한 속도 조건 + 능숙한 최적 레일 주행
             const aiColors = ['#00d2ff', '#ff0055', '#00ff88', '#ffcc00', '#aa00ff', '#ff8800', '#00ffcc'];
             for(let i=0; i<AI_COUNT; i++) {{
                 const ai = createHighDetailKart(aiColors[i % aiColors.length], `AI_${{i+1}}`);
@@ -289,9 +295,9 @@ html_code = f"""
                 const aiTan = trackCurve.getTangentAt(ai.posProgress);
                 ai.mesh.position.set(aiPt.x, 0, aiPt.z);
                 ai.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aiTan);
-                // 🔥 AI 최고속도 상향 (플레이어와 박빙 경쟁)
-                ai.baseSpeed = maxSpeed * (1.02 + Math.random() * 0.12);
-                ai.speed = ai.baseSpeed;
+                
+                // 🔥 AI 속도를 플레이어 최고속도와 거의 비슷하게 조절 (비정상 과속 방지)
+                ai.speed = maxSpeed * (0.96 + Math.random() * 0.03);
                 aiKarts.push(ai);
                 scene.add(ai.mesh);
             }}
@@ -306,7 +312,7 @@ html_code = f"""
             animate();
         }}
 
-        // --- 수평 트랙 & 경계 벽 ---
+        // 수평 트랙 & 경계 벽
         function createFlatTrackAndWalls() {{
             let points = [];
             if (TRACK_TYPE === 'circuit') {{
@@ -394,7 +400,6 @@ html_code = f"""
             buildHighDetailStructures();
         }}
 
-        // --- 입체 3D 방음/안전 벽 ---
         function buildGuardrailWalls(leftPts, rightPts) {{
             const wallMat = (TRACK_TYPE === 'rainbow') 
                 ? new THREE.MeshStandardMaterial({{ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.9 }})
@@ -429,22 +434,17 @@ html_code = f"""
             scene.add(arch);
         }}
 
-        // --- ✨ 대폭 상향된 고화질 건축물 & 구조물 ---
         function buildHighDetailStructures() {{
             if (TRACK_TYPE === 'circuit') {{
-                // 디테일 마리오 캐슬 (중앙 성)
                 const castleGroup = new THREE.Group();
                 const wallMat = new THREE.MeshStandardMaterial({{ color: 0xf0f0f0, roughness: 0.5 }});
                 const roofMat = new THREE.MeshStandardMaterial({{ color: 0xe52521, roughness: 0.3 }});
-                const goldMat = new THREE.MeshStandardMaterial({{ color: 0xffd700, metalness: 0.8, roughness: 0.2 }});
 
                 const mainKeep = new THREE.Mesh(new THREE.BoxGeometry(26, 22, 26), wallMat);
                 mainKeep.position.y = 11;
                 const mainRoof = new THREE.Mesh(new THREE.ConeGeometry(20, 16, 4), roofMat);
-                roofMat.color.setHex(0xe52521);
                 mainRoof.position.y = 30; mainRoof.rotation.y = Math.PI/4;
 
-                // 타워 4개
                 const towerPos = [[-13, -13], [13, -13], [-13, 13], [13, 13]];
                 towerPos.forEach(pos => {{
                     const tower = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 28, 16), wallMat);
@@ -458,14 +458,12 @@ html_code = f"""
                 castleGroup.position.set(0, 0, 0);
                 scene.add(castleGroup);
 
-                // 파이프 & 다채로운 버섯 나무 배치
                 const pipeColors = [0x43b047, 0x0099ff, 0xff0055, 0xffcc00];
                 for(let t=0.04; t<0.96; t+=0.06) {{
                     const pt = trackCurve.getPointAt(t);
                     const tan = trackCurve.getTangentAt(t);
                     const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0,1,0)).normalize();
 
-                    // 디테일 파이프 (림 포함)
                     const pCol = pipeColors[Math.floor(Math.random() * pipeColors.length)];
                     const pMat = new THREE.MeshStandardMaterial({{ color: pCol, roughness: 0.3, metalness: 0.3 }});
                     const pipeGroup = new THREE.Group();
@@ -477,7 +475,6 @@ html_code = f"""
                     pipeGroup.position.copy(pt).add(side.clone().multiplyScalar(26));
                     scene.add(pipeGroup);
 
-                    // 알록달록 버섯 나무
                     const mColor = pipeColors[(Math.floor(t*100)) % pipeColors.length];
                     const mCapMat = new THREE.MeshStandardMaterial({{ color: mColor, roughness: 0.4 }});
                     const mStemMat = new THREE.MeshStandardMaterial({{ color: 0xfffdd0, roughness: 0.6 }});
@@ -491,7 +488,6 @@ html_code = f"""
                     scene.add(mushroom);
                 }}
             }} else if (TRACK_TYPE === 'desert') {{
-                // 사막 스티플 피라미드 & 석조 문
                 const pyrMat = new THREE.MeshStandardMaterial({{ color: 0xd7ccc8, roughness: 0.85 }});
                 const pyr = new THREE.Mesh(new THREE.ConeGeometry(60, 45, 4), pyrMat);
                 pyr.position.set(0, 22.5, 0); pyr.rotation.y = Math.PI / 4;
@@ -507,8 +503,7 @@ html_code = f"""
                     pillar.position.y = 10;
                     scene.add(pillar);
                 }}
-            }} else {{ // rainbow
-                // 무지개 우주 포털 & 별 광원
+            }} else {{
                 for(let t=0.04; t<0.96; t+=0.08) {{
                     const pt = trackCurve.getPointAt(t);
                     const tan = trackCurve.getTangentAt(t);
@@ -547,7 +542,6 @@ html_code = f"""
             }}
         }}
 
-        // --- ✨ 대폭 고화질화된 카트 & 캐릭터 3D 모델 ---
         function createHighDetailKart(colorHex, name) {{
             const group = new THREE.Group();
             const bodyMat = new THREE.MeshStandardMaterial({{ color: colorHex, roughness: 0.2, metalness: 0.6 }});
@@ -555,17 +549,14 @@ html_code = f"""
             const wheelMat = new THREE.MeshStandardMaterial({{ color: 0x151515, roughness: 0.7 }});
             const rimMat = new THREE.MeshStandardMaterial({{ color: 0xffd700, metalness: 0.9 }});
 
-            // 스포츠 메인 바디
             const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.7, 4.0), bodyMat);
             chassis.position.y = 0.6; chassis.castShadow = true;
             group.add(chassis);
 
-            // 전면 노즈 스포일러
             const nose = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.3, 1.2), bodyMat);
             nose.position.set(0, 0.3, 2.3);
             group.add(nose);
 
-            // 후면 레이싱 리어 윙 (대형 스포일러)
             const wingPole1 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), metalMat);
             wingPole1.position.set(-0.8, 1.4, -1.8);
             const wingPole2 = wingPole1.clone();
@@ -574,18 +565,15 @@ html_code = f"""
             wingBlade.position.set(0, 2.0, -1.8);
             group.add(wingPole1, wingPole2, wingBlade);
 
-            // 머플러 배기구 (불꽃 라이트)
             const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.8), metalMat);
             exhaust.rotation.x = Math.PI / 2;
             exhaust.position.set(0, 0.6, -2.1);
             group.add(exhaust);
 
-            // 스티어링 핸들
             const wheelRim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 8, 16), metalMat);
             wheelRim.position.set(0, 1.1, 0.6); wheelRim.rotation.x = Math.PI / 3;
             group.add(wheelRim);
 
-            // 휠 4개 (금색 휠 림 추가)
             const wheels = [];
             const offsets = [[-1.35, 0.55, 1.4], [1.35, 0.55, 1.4], [-1.35, 0.55, -1.3], [1.35, 0.55, -1.3]];
             offsets.forEach(pos => {{
@@ -600,7 +588,6 @@ html_code = f"""
                 wheels.push(wGroup);
             }});
 
-            // 캐릭터 헤드 & 레이싱 헬멧 헬멧 바이저
             const driverGroup = new THREE.Group();
             const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.65, 20, 20), bodyMat);
             helmet.position.set(0, 1.5, -0.1);
@@ -612,7 +599,6 @@ html_code = f"""
             return {{ mesh: group, wheels: wheels, name: name, posProgress: 0, speed: 0, spinOut: 0, boostTimer: 0 }};
         }}
 
-        // --- 아이템 박스 ---
         function createItemBoxes() {{
             const boxGeo = new THREE.BoxGeometry(2.2, 2.2, 2.2);
             const boxMat = new THREE.MeshStandardMaterial({{ color: 0xffd700, transparent: true, opacity: 0.88, emissive: 0xbb9900 }});
@@ -632,7 +618,6 @@ html_code = f"""
             }}
         }}
 
-        // --- 카운트다운 ---
         function startCountdown() {{
             const cd = document.getElementById('countdown');
             cd.style.display = 'block';
@@ -657,7 +642,6 @@ html_code = f"""
             if (e.code === 'KeyR') resetGame();
         }}
 
-        // --- 🚀 아이템 사용 시스템 (미사일 / 바나나 / 부스터) ---
         function useItem() {{
             if (!currentItem || raceState !== 'RACING') return;
 
@@ -668,7 +652,7 @@ html_code = f"""
                 dropBananaSafe();
                 playSound('item');
             }} else if (currentItem === 'MUSHROOM') {{
-                playerKart.boostTimer = 110;
+                playerKart.boostTimer = 90;
                 playSound('boost');
             }}
 
@@ -676,13 +660,11 @@ html_code = f"""
             document.getElementById('item-slot').innerText = '❓';
         }}
 
-        // 🔥 [미사일 발사 & 화염/섬광 이펙트]
         function fireMissile() {{
             const pPos = playerKart.mesh.position.clone();
             const pQuat = playerKart.mesh.quaternion.clone();
             const forwardDir = new THREE.Vector3(0, 0, 1).applyQuaternion(pQuat);
 
-            // 미사일 3D 메쉬 (붉은 레이싱 탄두)
             const mGroup = new THREE.Group();
             const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.6, 12), new THREE.MeshStandardMaterial({{ color: 0xff0022, metalness: 0.8 }}));
             body.rotation.x = Math.PI / 2;
@@ -690,14 +672,11 @@ html_code = f"""
             tip.rotation.x = Math.PI / 2; tip.position.z = 1.0;
             mGroup.add(body, tip);
 
-            // 전방 노즈에서 시작
             mGroup.position.copy(pPos).add(forwardDir.clone().multiplyScalar(2.5)).add(new THREE.Vector3(0, 1.0, 0));
             mGroup.quaternion.copy(pQuat);
             scene.add(mGroup);
 
             missiles.push({{ mesh: mGroup, dir: forwardDir, life: 120 }});
-
-            // 발사 화염 섬광 이펙트
             createMuzzleFlash(mGroup.position);
         }}
 
@@ -711,13 +690,12 @@ html_code = f"""
             particleEffects.push({{ mesh: flash, life: 10, fade: 0.1 }});
         }}
 
-        // 🍌 [내가 절대 맞지 않도록 바나나 후방 안전 투척]
         function dropBananaSafe() {{
             const pPos = playerKart.mesh.position.clone();
             const pQuat = playerKart.mesh.quaternion.clone();
             const backDir = new THREE.Vector3(0, 0, -1).applyQuaternion(pQuat);
 
-            const bananaPos = pPos.add(backDir.multiplyScalar(4.0)); // 차체 뒤쪽 안전지대에 설치
+            const bananaPos = pPos.add(backDir.multiplyScalar(4.0));
             bananaPos.y = 0.5;
 
             const geo = new THREE.CylinderGeometry(0.1, 0.8, 1.2, 8);
@@ -725,11 +703,9 @@ html_code = f"""
             banana.position.copy(bananaPos);
             scene.add(banana);
             
-            // 생성 직후 유예 시간 설정
             bananas.push({{ mesh: banana, immuneTimer: 40 }});
         }}
 
-        // --- 메인 애니메이션 루프 ---
         function animate() {{
             requestAnimationFrame(animate);
 
@@ -748,7 +724,7 @@ html_code = f"""
             renderer.render(scene, camera);
         }}
 
-        // --- 플레이어 물리 ---
+        // 🛠️ 조작 편의성이 대폭 향상된 플레이어 물리
         function updatePlayer() {{
             playerKart.mesh.position.y = 0;
 
@@ -760,34 +736,36 @@ html_code = f"""
             if (keys['ShiftLeft'] || keys['ShiftRight']) {{
                 if ((keys['KeyA'] || keys['ArrowLeft']) || (keys['KeyD'] || keys['ArrowRight'])) {{
                     isDrifting = true; driftTime++;
-                    if (driftTime > 40) document.getElementById('drift-indicator').innerText = '⚡ SUPER MINI-TURBO!';
-                    else if (driftTime > 20) document.getElementById('drift-indicator').innerText = '🔥 MINI-TURBO!';
+                    if (driftTime > 35) document.getElementById('drift-indicator').innerText = '⚡ SUPER MINI-TURBO!';
+                    else if (driftTime > 18) document.getElementById('drift-indicator').innerText = '🔥 MINI-TURBO!';
                 }}
             }} else {{
                 if (isDrifting) {{
-                    if (driftTime > 40) {{ playerKart.boostTimer = 60; playSound('boost'); }}
-                    else if (driftTime > 20) {{ playerKart.boostTimer = 30; playSound('boost'); }}
+                    if (driftTime > 35) {{ playerKart.boostTimer = 50; playSound('boost'); }}
+                    else if (driftTime > 18) {{ playerKart.boostTimer = 25; playSound('boost'); }}
                     isDrifting = false; driftTime = 0;
                     document.getElementById('drift-indicator').innerText = '';
                 }}
             }}
 
             let targetMaxSpeed = maxSpeed;
-            if (playerKart.boostTimer > 0) {{ playerKart.boostTimer--; targetMaxSpeed *= 1.55; }}
+            if (playerKart.boostTimer > 0) {{ playerKart.boostTimer--; targetMaxSpeed *= 1.4; }}
 
+            // 가속 / 감속 / 마찰력
             if (keys['KeyW'] || keys['ArrowUp']) speed = Math.min(speed + accel, targetMaxSpeed);
             else if (keys['KeyS'] || keys['ArrowDown']) speed = Math.max(speed - accel * 1.5, -maxSpeed * 0.4);
-            else speed *= 0.96;
+            else speed *= 0.95; // 자연스러운 자연 감속
 
-            if (keys['KeyA'] || keys['ArrowLeft']) steeringAngle = turnSpeed * (isDrifting ? 1.35 : 1.0);
-            else if (keys['KeyD'] || keys['ArrowRight']) steeringAngle = -turnSpeed * (isDrifting ? 1.35 : 1.0);
+            // 스티어링 (속도에 비례한 부드러운 선회)
+            if (keys['KeyA'] || keys['ArrowLeft']) steeringAngle = turnSpeed * (isDrifting ? 1.25 : 1.0);
+            else if (keys['KeyD'] || keys['ArrowRight']) steeringAngle = -turnSpeed * (isDrifting ? 1.25 : 1.0);
             else steeringAngle = 0;
 
-            playerKart.mesh.rotation.y += steeringAngle * (speed / maxSpeed);
+            playerKart.mesh.rotation.y += steeringAngle * Math.min(1.0, (speed / (maxSpeed * 0.5)));
 
             const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerKart.mesh.quaternion);
             playerKart.mesh.position.add(dir.multiplyScalar(speed));
-            playerKart.wheels.forEach(w => w.rotation.x += speed * 0.5);
+            playerKart.wheels.forEach(w => w.rotation.x += speed * 0.4);
 
             // 트랙 이탈 방지
             const pPos = playerKart.mesh.position;
@@ -807,7 +785,7 @@ html_code = f"""
                 const pushDir = new THREE.Vector3(pPos.x - closestCenterPt.x, 0, pPos.z - closestCenterPt.z).normalize();
                 pPos.x = closestCenterPt.x + pushDir.x * maxAllowedDist;
                 pPos.z = closestCenterPt.z + pushDir.z * maxAllowedDist;
-                if (Math.abs(speed) > 0.2) {{ playSound('hit'); speed *= 0.65; }}
+                if (Math.abs(speed) > 0.15) {{ playSound('hit'); speed *= 0.75; }}
             }}
 
             if (playerKart.posProgress > 0.85 && closestT < 0.15) {{
@@ -821,14 +799,14 @@ html_code = f"""
             document.getElementById('speed-text').innerText = Math.round(Math.abs(speed) * 120);
         }}
 
-        // --- 🤖 고지능 스마트 AI (추격 및 코너링 능력 상향) ---
+        // 🤖 스마트 AI: 플레이어와 동일한 최고 속도이나, 트랙 중심 레일을 완벽히 조종하여 코너링 미스가 전혀 없음
         function updateSmartAI() {{
             aiKarts.forEach(ai => {{
                 ai.mesh.position.y = 0;
                 if (ai.spinOut > 0) {{ ai.spinOut--; ai.mesh.rotation.y += 0.3; return; }}
 
-                // AI 가속 & 동적 속도 조절
-                ai.posProgress += (ai.speed / 2100);
+                // 최적 레일 경로를 따라 손실 없이 주행 (따라잡기 까다로운 실력파 AI)
+                ai.posProgress += (ai.speed / 3200);
                 if (ai.posProgress >= 1.0) ai.posProgress -= 1.0;
 
                 const targetPt = trackCurve.getPointAt((ai.posProgress + 0.02) % 1.0);
@@ -836,24 +814,21 @@ html_code = f"""
                 
                 ai.mesh.position.set(currentPt.x, 0, currentPt.z);
                 ai.mesh.lookAt(new THREE.Vector3(targetPt.x, 0, targetPt.z));
-                ai.wheels.forEach(w => w.rotation.x += 0.35);
+                ai.wheels.forEach(w => w.rotation.x += 0.25);
             }});
         }}
 
-        // --- 🚀 미사일 물리 & 충돌 검사 & 이펙트 ---
         function updateMissilesAndEffects() {{
-            // 미사일 이동 및 AI 명중 검사
             for(let i = missiles.length - 1; i >= 0; i--) {{
                 const m = missiles[i];
                 m.life--;
-                m.mesh.position.add(m.dir.clone().multiplyScalar(2.2));
+                m.mesh.position.add(m.dir.clone().multiplyScalar(2.0));
 
                 let hit = false;
-                // AI 충돌 검사
                 aiKarts.forEach(ai => {{
                     if (!hit && m.mesh.position.distanceTo(ai.mesh.position) < 3.2) {{
                         hit = true;
-                        ai.spinOut = 60; // AI 스핀아웃!
+                        ai.spinOut = 60;
                         playSound('hit');
                         createMuzzleFlash(ai.mesh.position);
                     }}
@@ -865,7 +840,6 @@ html_code = f"""
                 }}
             }}
 
-            // 파티클/섬광 피드백 소멸
             for(let i = particleEffects.length - 1; i >= 0; i--) {{
                 const p = particleEffects[i];
                 p.life--;
@@ -877,7 +851,6 @@ html_code = f"""
             }}
         }}
 
-        // --- 아이템 Box & 바나나 관리 ---
         function updateItemBoxesAndBananas() {{
             itemBoxes.forEach(box => {{
                 if (box.userData.active) {{
@@ -892,18 +865,15 @@ html_code = f"""
                 }}
             }});
 
-            // 바나나 피격 (안전 유예 체크)
             bananas.forEach((bObj, idx) => {{
                 if (bObj.immuneTimer > 0) bObj.immuneTimer--;
 
-                // 플레이어 피격 (생성 직후 유예 시간이 끝난 바나나만 피격)
                 if (bObj.immuneTimer === 0 && playerKart.mesh.position.distanceTo(bObj.mesh.position) < 1.8) {{
                     playerKart.spinOut = 45; playSound('hit');
                     scene.remove(bObj.mesh); bananas.splice(idx, 1);
                     return;
                 }}
 
-                // AI 바나나 피격
                 aiKarts.forEach(ai => {{
                     if (ai.mesh.position.distanceTo(bObj.mesh.position) < 2.0) {{
                         ai.spinOut = 50; playSound('hit');
@@ -921,7 +891,6 @@ html_code = f"""
             document.getElementById('item-slot').innerText = icons[pick];
         }}
 
-        // --- 순위 판정 ---
         function updatePositions() {{
             let racers = [
                 {{ name: 'PLAYER', progress: totalProgress }},
@@ -934,7 +903,6 @@ html_code = f"""
             document.getElementById('rank-text').innerText = `${{rank}}${{(rank <= 3) ? suffixes[rank - 1] : "th"}}`;
         }}
 
-        // --- 카메라 시점 ---
         function updateCamera() {{
             const pPos = playerKart.mesh.position;
             const pQuat = playerKart.mesh.quaternion;
@@ -953,7 +921,6 @@ html_code = f"""
             }}
         }}
 
-        // --- 미니맵 ---
         function drawMinimap() {{
             const canvas = document.getElementById('minimap-canvas');
             const ctx = canvas.getContext('2d');
