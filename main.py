@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 # 페이지 기본 설정
 st.set_page_config(
-    page_title="3D 마리오 카트 8 - 디테일 업그레이드",
+    page_title="3D 마리오 카트 8 - 완전 평면 & 트랙 이탈 방지",
     page_icon="🏎️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -29,7 +29,7 @@ st.sidebar.markdown("---")
 
 track_type = st.sidebar.selectbox(
     "🗺️ 트랙 코스 선택",
-    ["무지개 로드 (Rainbow Road)", "마리오 서킷 (Mario Circuit)", "사막 힐스 (Desert Hills)"]
+    ["마리오 서킷 (Mario Circuit)", "사막 힐스 (Desert Hills)", "무지개 로드 (Rainbow Road)"]
 )
 
 character = st.sidebar.selectbox(
@@ -50,14 +50,14 @@ st.sidebar.markdown("""
 ---
 ### 🎮 게임 조작법
 * **[ W / ↑ ]** : 가속 | **[ S / ↓ ]** : 감속/후진
-* **[ A, D / ←, → ]** : 조향 (스티어링)
-* **[ Shift ]** : 드리프트 (코너링 중 부스터 스파크!)
-* **[ Space / E ]** : 아이템 사용
-* **[ C ]** : 카메라인 시점 변경
+* **[ A, D / ←, → ]** : 조향 (핸들링)
+* **[ Shift ]** : 드리프트 (코너에서 부스터 모으기)
+* **[ Space / E ]** : 아이템 사용 (버섯, 바나나, 번개)
+* **[ C ]** : 시점 변경 (3인칭 / 탑뷰 / 1인칭)
 * **[ R ]** : 게임 재시작
 """)
 
-track_code = "rainbow" if "무지개" in track_type else ("circuit" if "서킷" in track_type else "desert")
+track_code = "circuit" if "서킷" in track_type else ("desert" if "사막" in track_type else "rainbow")
 
 color_map = {
     "마리오 (Red)": "#e52521",
@@ -78,7 +78,7 @@ html_code = f"""
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>3D Mario Kart Streamlit Enhanced</title>
+    <title>3D Mario Kart Flat Track Edition</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }}
         body {{ overflow: hidden; background: #000; width: 100vw; height: 100vh; }}
@@ -93,9 +93,9 @@ html_code = f"""
         }}
         .top-bar {{ display: flex; justify-content: space-between; align-items: flex-start; }}
         .glass-box {{
-            background: rgba(15, 23, 42, 0.7);
+            background: rgba(15, 23, 42, 0.75);
             backdrop-filter: blur(10px);
-            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            border: 1.5px solid rgba(255, 255, 255, 0.25);
             border-radius: 12px;
             padding: 10px 16px;
             color: #fff;
@@ -110,7 +110,7 @@ html_code = f"""
             width: 64px; height: 64px; border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
             font-size: 32px; border: 2.5px solid #ffd700;
-            background: rgba(0,0,0,0.65); box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+            background: rgba(0,0,0,0.7); box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
         }}
         
         .speedometer {{
@@ -120,12 +120,12 @@ html_code = f"""
         .speed-val {{ font-size: 38px; font-weight: bold; color: #00f2fe; text-shadow: 0 0 10px #00f2fe; }}
         .speed-unit {{ font-size: 14px; color: #aaa; }}
 
-        /* 축소 및 가독성 개선된 미니맵 */
+        /* 컴팩트 미니맵 */
         #minimap-canvas {{
             position: absolute; bottom: 16px; left: 16px;
             width: 110px; height: 110px;
-            border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
-            background: rgba(0, 0, 0, 0.65); box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+            border-radius: 50%; border: 2px solid rgba(255,255,255,0.6);
+            background: rgba(0, 0, 0, 0.7); box-shadow: 0 4px 15px rgba(0,0,0,0.7);
             z-index: 10;
         }}
 
@@ -196,6 +196,7 @@ html_code = f"""
         let playerKart;
         let aiKarts = [];
         let trackCurve, trackMesh;
+        const TRACK_WIDTH = 22; // 넓고 원활한 도로 폭
         let itemBoxes = [], bananas = [];
         
         let keys = {{}};
@@ -207,7 +208,7 @@ html_code = f"""
         let currentItem = null;
         let cameraMode = 0;
 
-        // --- 사운드 효과 ---
+        // --- 오디오 효과음 ---
         let audioCtx = null;
         function initAudio() {{ if (!SOUND_ENABLED || audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }}
         function playSound(type) {{
@@ -230,9 +231,9 @@ html_code = f"""
                     osc.start(now); osc.stop(now + 0.3);
                 }} else if (type === 'hit') {{
                     osc.type = 'square'; osc.frequency.setValueAtTime(140, now);
-                    osc.frequency.exponentialRampToValueAtTime(30, now + 0.4);
-                    gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-                    osc.start(now); osc.stop(now + 0.4);
+                    osc.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                    gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now); osc.stop(now + 0.3);
                 }} else if (type === 'beep') {{
                     osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
                     gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
@@ -259,33 +260,37 @@ html_code = f"""
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             container.appendChild(renderer.domElement);
 
-            // 조명 설정
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+            // 조명
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
 
             const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
             sunLight.position.set(120, 180, 80);
             sunLight.castShadow = true;
             sunLight.shadow.mapSize.width = 2048; sunLight.shadow.mapSize.height = 2048;
-            sunLight.shadow.camera.near = 10; sunLight.shadow.camera.far = 500;
-            const d = 200;
-            sunLight.shadow.camera.left = -d; sunLight.shadow.camera.right = d;
-            sunLight.shadow.camera.top = d; sunLight.shadow.camera.bottom = -d;
             scene.add(sunLight);
 
             createEnvironment();
-            createTrackAndStructures();
+            createFlatTrackAndWalls();
 
-            // 플레이어
+            // 플레이어 카트 (트랙 시작점 Y=0 수평에 배치)
             playerKart = createKartMesh(PLAYER_COLOR, "PLAYER");
-            scene.add(playerKart.mesh);
+            const startPt = trackCurve.getPointAt(0);
+            const startTan = trackCurve.getTangentAt(0);
+            playerKart.mesh.position.set(startPt.x, 0, startPt.z);
+            playerKart.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), startTan);
             playerKart.posProgress = 0;
+            scene.add(playerKart.mesh);
 
-            // AI 카트들
+            // AI 카트들 (트랙 뒤쪽에 나란히 배치)
             const aiColors = ['#00d2ff', '#ff0055', '#00ff88', '#ffcc00', '#aa00ff', '#ff8800', '#00ffcc'];
             for(let i=0; i<AI_COUNT; i++) {{
                 const ai = createKartMesh(aiColors[i % aiColors.length], `AI_${{i+1}}`);
-                ai.posProgress = - (i + 1) * 0.015;
+                ai.posProgress = 0.99 - (i * 0.018);
+                const aiPt = trackCurve.getPointAt(ai.posProgress);
+                const aiTan = trackCurve.getTangentAt(ai.posProgress);
+                ai.mesh.position.set(aiPt.x, 0, aiPt.z);
+                ai.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aiTan);
                 ai.speed = maxSpeed * (0.86 + Math.random() * 0.18);
                 aiKarts.push(ai);
                 scene.add(ai.mesh);
@@ -301,61 +306,58 @@ html_code = f"""
             animate();
         }}
 
-        // --- 복잡해진 트랙 & 테마별 3D 구조물 생성 ---
-        function createTrackAndStructures() {{
+        // --- 완전 수평(Y=0) 트랙 & 입체 3D 벽(Guardrail) 생성 ---
+        function createFlatTrackAndWalls() {{
             let points = [];
-            if (TRACK_TYPE === 'rainbow') {{
-                // 높은 고저차의 스파이럴 무지개 트랙
+            
+            // 모든 제어점의 Y값을 0으로 고정하여 완전 수평 평면 구현
+            if (TRACK_TYPE === 'circuit') {{
                 points = [
-                    new THREE.Vector3(-160, 0, -120),
-                    new THREE.Vector3(-180, 20, -20),
-                    new THREE.Vector3(-130, 35, 90),
-                    new THREE.Vector3(-40, 20, 160),
-                    new THREE.Vector3(50, -5, 140),
-                    new THREE.Vector3(120, -25, 60),
-                    new THREE.Vector3(170, 5, -20),
-                    new THREE.Vector3(140, 30, -120),
-                    new THREE.Vector3(20, 15, -170),
-                    new THREE.Vector3(-80, 0, -150)
+                    new THREE.Vector3(-150, 0, -120),
+                    new THREE.Vector3(-170, 0, -20),
+                    new THREE.Vector3(-120, 0, 90),
+                    new THREE.Vector3(-40, 0, 150),
+                    new THREE.Vector3(50, 0, 160),
+                    new THREE.Vector3(120, 0, 100),
+                    new THREE.Vector3(60, 0, 20),    // S자 코너
+                    new THREE.Vector3(140, 0, -40),
+                    new THREE.Vector3(160, 0, -120),
+                    new THREE.Vector3(60, 0, -160),
+                    new THREE.Vector3(-40, 0, -130)
                 ];
-            }} else if (TRACK_TYPE === 'circuit') {{
-                // 시케인 코너와 S자가 섞인 마리오 서킷
+            }} else if (TRACK_TYPE === 'desert') {{
+                points = [
+                    new THREE.Vector3(-140, 0, -140),
+                    new THREE.Vector3(-180, 0, -20),
+                    new THREE.Vector3(-110, 0, 70),
+                    new THREE.Vector3(-20, 0, 150),
+                    new THREE.Vector3(80, 0, 160),
+                    new THREE.Vector3(160, 0, 80),
+                    new THREE.Vector3(170, 0, -30),
+                    new THREE.Vector3(110, 0, -130),
+                    new THREE.Vector3(0, 0, -180)
+                ];
+            }} else {{ // rainbow
                 points = [
                     new THREE.Vector3(-160, 0, -120),
                     new THREE.Vector3(-180, 0, -20),
-                    new THREE.Vector3(-130, 8, 80),
-                    new THREE.Vector3(-60, 15, 140),
-                    new THREE.Vector3(20, 5, 160),
-                    new THREE.Vector3(90, -5, 100),
-                    new THREE.Vector3(50, 0, 30),    // 급격한 시케인 코너
-                    new THREE.Vector3(130, 0, -30),
-                    new THREE.Vector3(170, 0, -110),
-                    new THREE.Vector3(80, 0, -160),
-                    new THREE.Vector3(-40, 0, -130)
-                ];
-            }} else {{
-                // 사막 협곡 힐스
-                points = [
-                    new THREE.Vector3(-140, 0, -140),
-                    new THREE.Vector3(-180, 10, -40),
-                    new THREE.Vector3(-110, 22, 60),
-                    new THREE.Vector3(-30, 8, 150),
-                    new THREE.Vector3(70, 0, 170),
-                    new THREE.Vector3(150, -10, 100),
-                    new THREE.Vector3(180, 8, -20),
-                    new THREE.Vector3(110, 18, -120),
-                    new THREE.Vector3(0, 0, -180)
+                    new THREE.Vector3(-130, 0, 90),
+                    new THREE.Vector3(-40, 0, 160),
+                    new THREE.Vector3(50, 0, 140),
+                    new THREE.Vector3(130, 0, 60),
+                    new THREE.Vector3(170, 0, -20),
+                    new THREE.Vector3(140, 0, -120),
+                    new THREE.Vector3(20, 0, -170),
+                    new THREE.Vector3(-80, 0, -150)
                 ];
             }}
 
             trackCurve = new THREE.CatmullRomCurve3(points, true, 'centripetal', 0.5);
             
-            // 1. 메인 도로 메쉬
+            // 1. 도로 메쉬 (수평 평면)
             const samples = 400;
-            const trackWidth = 20;
             const geometry = new THREE.BufferGeometry();
             const positions = [], uvs = [], normals = [];
-
             const leftBorderPts = [], rightBorderPts = [];
 
             for (let i = 0; i <= samples; i++) {{
@@ -365,16 +367,15 @@ html_code = f"""
                 const up = new THREE.Vector3(0, 1, 0);
                 const side = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-                const p1 = pt.clone().add(side.clone().multiplyScalar(trackWidth / 2));
-                const p2 = pt.clone().add(side.clone().multiplyScalar(-trackWidth / 2));
+                const p1 = pt.clone().add(side.clone().multiplyScalar(TRACK_WIDTH / 2));
+                const p2 = pt.clone().add(side.clone().multiplyScalar(-TRACK_WIDTH / 2));
 
-                positions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+                positions.push(p1.x, 0.05, p1.z, p2.x, 0.05, p2.z);
                 uvs.push(0, t * 30, 1, t * 30);
                 normals.push(0, 1, 0, 0, 1, 0);
 
-                // 가드레일/커브용 포인트 저장
-                leftBorderPts.push(p1.add(new THREE.Vector3(0, 0.4, 0)));
-                rightBorderPts.push(p2.add(new THREE.Vector3(0, 0.4, 0)));
+                leftBorderPts.push(p1);
+                rightBorderPts.push(p2);
             }}
 
             const indices = [];
@@ -393,39 +394,42 @@ html_code = f"""
             if (TRACK_TYPE === 'rainbow') {{
                 mat = new THREE.MeshStandardMaterial({{
                     color: 0xffffff, roughness: 0.1, metalness: 0.8,
-                    transparent: true, opacity: 0.88, emissive: 0x442266
+                    transparent: true, opacity: 0.9, emissive: 0x331155
                 }});
             }} else if (TRACK_TYPE === 'circuit') {{
-                mat = new THREE.MeshStandardMaterial({{ color: 0x222225, roughness: 0.7 }});
+                mat = new THREE.MeshStandardMaterial({{ color: 0x222225, roughness: 0.8 }});
             }} else {{
-                mat = new THREE.MeshStandardMaterial({{ color: 0x8d6e63, roughness: 0.9 }});
+                mat = new THREE.MeshStandardMaterial({{ color: 0x7c5235, roughness: 0.9 }});
             }}
 
             trackMesh = new THREE.Mesh(geometry, mat);
             trackMesh.receiveShadow = true;
             scene.add(trackMesh);
 
-            // 2. 가시성을 극대화하는 트랙 테두리 가드레일 (Glowing Border / Curbs)
-            createTrackBorders(leftBorderPts, rightBorderPts);
+            // 2. 트랙 밖으로 못 나가게 막는 실체 3D 안전펜스 벽(Wall Guardrail)
+            buildGuardrailWalls(leftBorderPts, rightBorderPts);
 
             // 3. 출발선 아치
             createStartArch();
 
-            // 4. 테마별 3D 구조물 대량 배치
+            // 4. 주변 구조물 배치
             buildWorldStructures();
         }}
 
-        // --- 트랙 경계 선명화 (가드레일 & 커브) ---
-        function createTrackBorders(leftPts, rightPts) {{
-            const borderMat = (TRACK_TYPE === 'rainbow') 
-                ? new THREE.MeshStandardMaterial({{ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.8 }})
-                : new THREE.MeshStandardMaterial({{ color: (TRACK_TYPE === 'circuit') ? 0xff0055 : 0xffb300, roughness: 0.4 }});
+        // --- 입체 3D 안전 벽 (Guardrail) ---
+        function buildGuardrailWalls(leftPts, rightPts) {{
+            const wallMat = (TRACK_TYPE === 'rainbow') 
+                ? new THREE.MeshStandardMaterial({{ color: 0x00f2fe, emissive: 0x00f2fe, emissiveIntensity: 0.8 }})
+                : new THREE.MeshStandardMaterial({{ color: (TRACK_TYPE === 'circuit') ? 0xe52521 : 0xffb300, roughness: 0.3 }});
 
             [leftPts, rightPts].forEach(pts => {{
                 const curve = new THREE.CatmullRomCurve3(pts, true);
-                const tubeGeo = new THREE.TubeGeometry(curve, 300, 0.4, 8, true);
-                const borderMesh = new THREE.Mesh(tubeGeo, borderMat);
-                scene.add(borderMesh);
+                // 굵고 튼튼한 3D 튜브 벽 생성 (높이 Y=1.2)
+                const tubeGeo = new THREE.TubeGeometry(curve, 300, 1.2, 12, true);
+                const wallMesh = new THREE.Mesh(tubeGeo, wallMat);
+                wallMesh.position.y = 1.0;
+                wallMesh.castShadow = true;
+                scene.add(wallMesh);
             }});
         }}
 
@@ -434,82 +438,93 @@ html_code = f"""
             const startPt = trackCurve.getPointAt(0);
             const startTan = trackCurve.getTangentAt(0);
             const arch = new THREE.Group();
-            const poleMat = new THREE.MeshStandardMaterial({{ color: 0xeeeeee, metalness: 0.8 }});
+            const poleMat = new THREE.MeshStandardMaterial({{ color: 0xdddddd, metalness: 0.8 }});
             
-            const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 14), poleMat);
+            const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 14), poleMat);
             const p2 = p1.clone();
-            p1.position.set(-11, 7, 0); p2.position.set(11, 7, 0);
+            p1.position.set(-12, 7, 0); p2.position.set(12, 7, 0);
             
-            const banner = new THREE.Mesh(new THREE.BoxGeometry(23, 3.5, 0.8), new THREE.MeshStandardMaterial({{ color: 0xff0055 }}));
+            const banner = new THREE.Mesh(new THREE.BoxGeometry(25, 4, 1.0), new THREE.MeshStandardMaterial({{ color: 0xff0055 }}));
             banner.position.set(0, 12, 0);
             
             arch.add(p1, p2, banner);
-            arch.position.copy(startPt);
+            arch.position.set(startPt.x, 0, startPt.z);
             arch.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), startTan);
             scene.add(arch);
         }}
 
-        // --- 테마별 입체 구조물 생성 ---
+        // --- 주변 3D 입체 구조물 ---
         function buildWorldStructures() {{
-            if (TRACK_TYPE === 'rainbow') {{
-                // 네온 관통 링 및 자이언트 크리스탈
-                for(let t=0.08; t<0.95; t+=0.1) {{
-                    const pt = trackCurve.getPointAt(t);
-                    const tan = trackCurve.getTangentAt(t);
-                    
-                    const ringGeo = new THREE.TorusGeometry(14, 0.8, 16, 32);
-                    const ringMat = new THREE.MeshStandardMaterial({{ color: 0xff00cc, emissive: 0xff00cc, emissiveIntensity: 0.6 }});
-                    const ring = new THREE.Mesh(ringGeo, ringMat);
-                    ring.position.copy(pt).add(new THREE.Vector3(0, 8, 0));
-                    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), tan);
-                    scene.add(ring);
-                }}
-            }} else if (TRACK_TYPE === 'circuit') {{
-                // 마리오 캐슬 성벽, 초록 파이프, 나무 배치
+            if (TRACK_TYPE === 'circuit') {{
+                // 마리오 중앙 성벽 & 거대 초록 파이프 & 나무들
+                const castleMat = new THREE.MeshStandardMaterial({{ color: 0xe0e0e0, roughness: 0.6 }});
+                const roofMat = new THREE.MeshStandardMaterial({{ color: 0x29b6f6 }});
+                
+                // 중앙 성 구조물
+                const castleGroup = new THREE.Group();
+                const keep = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), castleMat);
+                keep.position.y = 10;
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(16, 12, 4), roofMat);
+                roof.position.y = 26; roof.rotation.y = Math.PI/4;
+                castleGroup.add(keep, roof);
+                castleGroup.position.set(0, 0, 0);
+                scene.add(castleGroup);
+
                 const pipeMat = new THREE.MeshStandardMaterial({{ color: 0x43b047, roughness: 0.3 }});
                 const treeMat = new THREE.MeshStandardMaterial({{ color: 0x2e7d32, roughness: 0.8 }});
                 const woodMat = new THREE.MeshStandardMaterial({{ color: 0x795548 }});
-
-                for(let t=0.03; t<0.98; t+=0.07) {{
-                    const pt = trackCurve.getPointAt(t);
-                    const tan = trackCurve.getTangentAt(t);
-                    const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0,1,0)).normalize();
-
-                    // 거대 워프 파이프
-                    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 7, 16), pipeMat);
-                    pipe.position.copy(pt).add(side.clone().multiplyScalar((t % 0.1 > 0.05 ? 1 : -1) * 22));
-                    pipe.position.y += 3.5;
-                    pipe.castShadow = true;
-                    scene.add(pipe);
-
-                    // 버섯 모양 입체 나무
-                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 5), woodMat);
-                    const foliage = new THREE.Mesh(new THREE.SphereGeometry(3.5, 8, 8), treeMat);
-                    foliage.position.y = 4.5;
-                    const tree = new THREE.Group(); tree.add(trunk, foliage);
-                    tree.position.copy(pt).add(side.clone().multiplyScalar((t % 0.1 > 0.05 ? -1 : 1) * 28));
-                    tree.castShadow = true;
-                    scene.add(tree);
-                }}
-            }} else {{
-                // 사막 피라미드, 석조 기둥, 선인장
-                const pyramidMat = new THREE.MeshStandardMaterial({{ color: 0xd7ccc8, roughness: 0.9 }});
-                const pyr = new THREE.Mesh(new THREE.ConeGeometry(40, 35, 4), pyramidMat);
-                pyr.position.set(0, 17.5, 0);
-                pyr.rotation.y = Math.PI / 4;
-                scene.add(pyr);
 
                 for(let t=0.05; t<0.95; t+=0.08) {{
                     const pt = trackCurve.getPointAt(t);
                     const tan = trackCurve.getTangentAt(t);
                     const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0,1,0)).normalize();
 
-                    // 사막 고대 석조 기둥
-                    const pillar = new THREE.Mesh(new THREE.BoxGeometry(3, 16, 3), pyramidMat);
-                    pillar.position.copy(pt).add(side.clone().multiplyScalar((t % 0.1 > 0.05 ? 1 : -1) * 20));
-                    pillar.position.y += 8;
+                    // 초록 파이프
+                    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 8, 16), pipeMat);
+                    pipe.position.copy(pt).add(side.clone().multiplyScalar(24));
+                    pipe.position.y = 4;
+                    pipe.castShadow = true;
+                    scene.add(pipe);
+
+                    // 입체 나무
+                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 6), woodMat);
+                    const foliage = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 8), treeMat);
+                    foliage.position.y = 5;
+                    const tree = new THREE.Group(); tree.add(trunk, foliage);
+                    tree.position.copy(pt).add(side.clone().multiplyScalar(-26));
+                    tree.castShadow = true;
+                    scene.add(tree);
+                }}
+            }} else if (TRACK_TYPE === 'desert') {{
+                // 대형 피라미드 & 고대 석조 기둥들
+                const pyrMat = new THREE.MeshStandardMaterial({{ color: 0xd7ccc8, roughness: 0.9 }});
+                const pyr = new THREE.Mesh(new THREE.ConeGeometry(50, 40, 4), pyrMat);
+                pyr.position.set(0, 20, 0); pyr.rotation.y = Math.PI / 4;
+                scene.add(pyr);
+
+                for(let t=0.05; t<0.95; t+=0.07) {{
+                    const pt = trackCurve.getPointAt(t);
+                    const tan = trackCurve.getTangentAt(t);
+                    const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0,1,0)).normalize();
+
+                    const pillar = new THREE.Mesh(new THREE.BoxGeometry(3.5, 18, 3.5), pyrMat);
+                    pillar.position.copy(pt).add(side.clone().multiplyScalar((t % 0.1 > 0.05 ? 1 : -1) * 24));
+                    pillar.position.y = 9;
                     pillar.castShadow = true;
                     scene.add(pillar);
+                }}
+            }} else {{ // rainbow
+                // 네온 토러스 링 아치
+                for(let t=0.05; t<0.95; t+=0.09) {{
+                    const pt = trackCurve.getPointAt(t);
+                    const tan = trackCurve.getTangentAt(t);
+                    
+                    const ringGeo = new THREE.TorusGeometry(15, 1.0, 16, 32);
+                    const ringMat = new THREE.MeshStandardMaterial({{ color: 0xff00cc, emissive: 0xff00cc, emissiveIntensity: 0.8 }});
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.position.copy(pt).add(new THREE.Vector3(0, 8, 0));
+                    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), tan);
+                    scene.add(ring);
                 }}
             }}
         }}
@@ -525,20 +540,20 @@ html_code = f"""
                 scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({{ color: 0xffffff, size: 1.5 }})));
             }} else if (TRACK_TYPE === 'circuit') {{
                 scene.background = new THREE.Color(0x64b5f6);
-                scene.fog = new THREE.FogExp2(0x64b5f6, 0.0025);
+                scene.fog = new THREE.FogExp2(0x64b5f6, 0.002);
                 const plane = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({{ color: 0x388e3c, roughness: 0.9 }}));
-                plane.rotation.x = -Math.PI/2; plane.position.y = -0.5; plane.receiveShadow = true;
+                plane.rotation.x = -Math.PI/2; plane.position.y = 0; plane.receiveShadow = true;
                 scene.add(plane);
             }} else {{
                 scene.background = new THREE.Color(0xffb74d);
-                scene.fog = new THREE.FogExp2(0xffb74d, 0.0035);
+                scene.fog = new THREE.FogExp2(0xffb74d, 0.003);
                 const plane = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({{ color: 0xe0a96d, roughness: 1.0 }}));
-                plane.rotation.x = -Math.PI/2; plane.position.y = -0.5; plane.receiveShadow = true;
+                plane.rotation.x = -Math.PI/2; plane.position.y = 0; plane.receiveShadow = true;
                 scene.add(plane);
             }}
         }}
 
-        // --- 3D 카트 모델 생성 ---
+        // --- 3D 카트 모델 ---
         function createKartMesh(colorHex, name) {{
             const group = new THREE.Group();
             const bodyMat = new THREE.MeshStandardMaterial({{ color: colorHex, roughness: 0.3, metalness: 0.5 }});
@@ -579,7 +594,7 @@ html_code = f"""
                 const tan = trackCurve.getTangentAt(t);
                 const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0,1,0)).normalize();
 
-                [-4.5, 0, 4.5].forEach(off => {{
+                [-5, 0, 5].forEach(off => {{
                     const box = new THREE.Mesh(boxGeo, boxMat);
                     box.position.copy(pt).add(side.clone().multiplyScalar(off)).add(new THREE.Vector3(0, 1.5, 0));
                     box.castShadow = true;
@@ -628,7 +643,7 @@ html_code = f"""
         function spawnBanana(pos) {{
             const geo = new THREE.CylinderGeometry(0.1, 0.8, 1.2, 8);
             const banana = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({{ color: 0xffeb3b }}));
-            banana.position.copy(pos); scene.add(banana); bananas.push(banana);
+            banana.position.set(pos.x, 0.6, pos.z); scene.add(banana); bananas.push(banana);
         }}
 
         // --- 루프 애니메이션 ---
@@ -649,12 +664,16 @@ html_code = f"""
             renderer.render(scene, camera);
         }}
 
-        // --- 플레이어 물리 ---
+        // --- 플레이어 물리 & 트랙 이탈 방지 벽 충돌 검사 ---
         function updatePlayer() {{
+            // 항시 Y=0 수평 고정
+            playerKart.mesh.position.y = 0;
+
             if (playerKart.spinOut > 0) {{
                 playerKart.spinOut--; playerKart.mesh.rotation.y += 0.3; speed *= 0.9; return;
             }}
 
+            // 드리프트
             if (keys['ShiftLeft'] || keys['ShiftRight']) {{
                 if ((keys['KeyA'] || keys['ArrowLeft']) || (keys['KeyD'] || keys['ArrowRight'])) {{
                     isDrifting = true; driftTime++;
@@ -687,14 +706,43 @@ html_code = f"""
             playerKart.mesh.position.add(dir.multiplyScalar(speed));
             playerKart.wheels.forEach(w => w.rotation.x += speed * 0.5);
 
-            // 랩 및 진행도 계산
-            const pt = playerKart.mesh.position;
-            let closestT = 0, minDist = Infinity;
-            for(let t=0; t<=1; t+=0.01) {{
-                const d = pt.distanceTo(trackCurve.getPointAt(t));
-                if (d < minDist) {{ minDist = d; closestT = t; }}
+            // -------------------------------------------------------------------
+            // 🔥 [핵심] 트랙 이탈 방지 물리 엔진 (Boundaries Guardrail Physics)
+            // -------------------------------------------------------------------
+            const pPos = playerKart.mesh.position;
+            let closestT = playerKart.posProgress;
+            let minDist = Infinity;
+            let closestCenterPt = null;
+
+            // 현재 위치 근처의 트랙 중심선 검색
+            for(let dt = -0.04; dt <= 0.04; dt += 0.004) {{
+                const t = (playerKart.posProgress + dt + 1.0) % 1.0;
+                const pt = trackCurve.getPointAt(t);
+                const d = Math.hypot(pPos.x - pt.x, pPos.z - pt.z);
+                if (d < minDist) {{
+                    minDist = d;
+                    closestT = t;
+                    closestCenterPt = pt;
+                }}
             }}
 
+            // 도로 한계선 반경 계산 (트랙 폭 / 2 - 카트 반지름)
+            const maxAllowedDist = (TRACK_WIDTH / 2) - 1.2;
+
+            if (minDist > maxAllowedDist && closestCenterPt) {{
+                // 트랙 밖으로 나가려고 할 때 중심선 방향으로 강제 밀어냄 (벽 충돌)
+                const pushDir = new THREE.Vector3(pPos.x - closestCenterPt.x, 0, pPos.z - closestCenterPt.z).normalize();
+                pPos.x = closestCenterPt.x + pushDir.x * maxAllowedDist;
+                pPos.z = closestCenterPt.z + pushDir.z * maxAllowedDist;
+
+                // 속도 감속 및 부딪히는 사운드
+                if (Math.abs(speed) > 0.2) {{
+                    playSound('hit');
+                    speed *= 0.6;
+                }}
+            }}
+
+            // 랩 판정
             if (playerKart.posProgress > 0.85 && closestT < 0.15) {{
                 currentLap++;
                 if (currentLap > totalLaps) finishRace();
@@ -709,9 +757,10 @@ html_code = f"""
             document.getElementById('speed-text').innerText = Math.round(Math.abs(speed) * 120);
         }}
 
-        // --- AI 레이서 ---
+        // --- AI 레이서 제어 (수평 트랙 고정) ---
         function updateAI() {{
             aiKarts.forEach(ai => {{
+                ai.mesh.position.y = 0;
                 if (ai.spinOut > 0) {{ ai.spinOut--; ai.mesh.rotation.y += 0.3; return; }}
 
                 ai.posProgress += (ai.speed / 2400);
@@ -720,8 +769,8 @@ html_code = f"""
                 const targetPt = trackCurve.getPointAt((ai.posProgress + 0.02) % 1.0);
                 const currentPt = trackCurve.getPointAt(ai.posProgress % 1.0);
                 
-                ai.mesh.position.copy(currentPt);
-                ai.mesh.lookAt(targetPt);
+                ai.mesh.position.set(currentPt.x, 0, currentPt.z);
+                ai.mesh.lookAt(new THREE.Vector3(targetPt.x, 0, targetPt.z));
                 ai.wheels.forEach(w => w.rotation.x += 0.3);
             }});
         }}
@@ -789,7 +838,7 @@ html_code = f"""
             }}
         }}
 
-        // --- 축소된 110px 컴팩트 미니맵 ---
+        // --- 미니맵 ---
         function drawMinimap() {{
             const canvas = document.getElementById('minimap-canvas');
             const ctx = canvas.getContext('2d');
@@ -798,7 +847,6 @@ html_code = f"""
             const scale = 0.24;
             const centerX = 55, centerY = 55;
 
-            // 트랙 라인
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.lineWidth = 4;
             ctx.beginPath();
